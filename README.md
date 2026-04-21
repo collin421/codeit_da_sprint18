@@ -134,15 +134,7 @@ docker compose up -d
 Airflow 웹 UI → **Admin → Variables** 에서 2개 등록.
 
 - **SERVICE_API_KEY**: 1단계에서 복사한 공공데이터 인증키
-- **GCP_SERVICE_ACCOUNT**: 4단계 JSON 파일 **전체 내용**을 한 줄 문자열로
-
-JSON → 한 줄 변환 명령 (Git Bash · PowerShell).
-
-```bash
-cat service_account_key.json | python -c "import sys,json; print(json.dumps(json.load(sys.stdin)))"
-```
-
-출력 결과를 Variable 값에 그대로 붙여넣기.
+- **GCP_SERVICE_ACCOUNT**: 4단계 JSON 파일 **전체 내용** 붙여넣기
 
 ### 8. DAG 실행
 
