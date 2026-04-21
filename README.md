@@ -63,8 +63,7 @@ http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty
 
 <sub>
 출처: 대기오염정보 기술문서 v1.3<br>
-p.6<br>
-Table 4 · API 서비스 개요
+p.6 Table 4 · API 서비스 개요
 </sub>
 
 ### 3. 파라미터 확인
