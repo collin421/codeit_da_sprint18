@@ -1,0 +1,11 @@
+{
+  "python.defaultInterpreterPath": "C:\Users\82107\anaconda3\envs\sprint18\python.exe",
+  "python.terminal.activateEnvironment": true,
+  "jupyter.jupyterServerType": "local",
+  "notebook.defaultKernel": "sprint18",
+  "terminal.integrated.env.windows": {
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUTF8": "1"
+  },
+  "files.encoding": "utf8"
+}

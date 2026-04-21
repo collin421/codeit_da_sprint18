@@ -1,0 +1,7 @@
+apache-airflow-providers-google
+google-cloud-bigquery
+google-cloud-storage
+pandas
+# Sprint 18에서 추가된 라이브러리
+lxml       # 에어코리아 API XML 파싱용
+requests   # HTTP API 호출용

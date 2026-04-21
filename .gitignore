@@ -1,0 +1,33 @@
+# GCP 인증 키 — 절대 커밋 금지
+*service_account*.json
+project-*.json
+*-credentials.json
+
+# 환경변수
+.env
+.env.local
+
+# Airflow 런타임
+logs/
+dags/data/
+dags/__pycache__/
+**/__pycache__/
+
+# Python
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.idea/
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 분석 산출물 (선택 — 생성된 차트를 커밋하고 싶으면 아래 3줄 주석 처리)
+# sprint18/*.png
+# sprint18/*.xlsx
+# sprint18/*.csv
