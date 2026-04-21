@@ -63,8 +63,7 @@ http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty
 
 <sub>
 출처: 대기오염정보 기술문서 v1.3<br>
-섹션 1.1.가<br>
-p.5<br>
+p.6<br>
 Table 4 · API 서비스 개요
 </sub>
 
@@ -74,7 +73,7 @@ Table 4 · API 서비스 개요
 
 <sub>
 출처: 대기오염정보 기술문서 v1.3<br>
-섹션 1.1.다.3.b<br>
+p.14~15<br>
 Table 16 · 요청 메시지 명세
 </sub>
 
@@ -82,27 +81,25 @@ Table 16 · 요청 메시지 명세
 
 - **데이터 생성주기**: 서버가 데이터를 매시 15분 내외로 새로 채움. 따라서 정각보다 **매시 20분** 에 호출하면 가장 신선한 데이터를 받을 수 있음 (현 DAG 는 정각 호출 → 필요 시 `schedule_interval="20 * * * *"` 로 변경 가능)
     <sub>
-    섹션 0.2<br>
-    p.4<br>
-    Table 3
+    p.5<br>
+    Table 3 · 데이터 생성주기
     </sub>
 
 - **응답 필드**: stationName, dataTime, pm10Value, pm25Value, sidoName 등 총 35개 필드
     <sub>
-    섹션 1.1.다.3.c<br>
+    p.17<br>
     Table 17 · 응답 메시지 명세
     </sub>
 
 - **API 한도**: 초당 최대 50 TPS, 평균 응답 500ms
     <sub>
-    섹션 1.1.다.3.a<br>
-    Table 15
+    p.14<br>
+    Table 15 · 상세기능정보
     </sub>
 
 - **에러 코드**: `22`(서비스 요청 제한 횟수 초과 — 하루 트래픽), `30`(등록하지 않은 서비스키) 등
     <sub>
-    섹션 2<br>
-    p.25<br>
+    p.26<br>
     Table 30
     </sub>
 
