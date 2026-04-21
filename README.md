@@ -8,13 +8,13 @@
 
 ---
 
-## 프로젝트가 뭐 하는 건가요?
+## 프로젝트 개요
 
-한국환경공단이 제공하는 **대기오염 공개 API** 에서 전국 약 700개 측정소의 데이터를 **한 시간에 한 번씩 자동으로 수집**합니다.
+한국환경공단 **대기오염 공개 API** 에서 전국 약 700개 측정소 데이터를 **매시간 자동 수집**.
 
-수집한 데이터는 구글 클라우드의 **BigQuery**(대용량 데이터베이스)에 쌓아두고, **Jupyter 노트북**에서 간단한 SQL 로 조회해서 **차트 3장**을 만듭니다.
+수집 데이터는 **BigQuery** 에 누적 적재, **Jupyter 노트북**에서 SQL 로 조회·집계 → **차트 3장** 생성.
 
-사람이 직접 할 일은 처음 한 번 셋업 해두는 것뿐. 이후에는 알아서 돌아갑니다.
+초기 셋업 이후에는 사람 개입 불필요. 자동으로 동작.
 
 ---
 
@@ -49,17 +49,17 @@
 
 ### 1. API 키 발급
 
-[공공데이터포털](https://www.data.go.kr/) 에서 회원가입 후 **한국환경공단 에어코리아 대기오염정보** 를 검색해 활용신청합니다. 승인되면 마이페이지에서 **Decoding 인증키** 를 복사합니다.
+[공공데이터포털](https://www.data.go.kr/) 회원가입 후 **한국환경공단 에어코리아 대기오염정보** 검색 → 활용신청. 승인 시 마이페이지에서 **Decoding 인증키** 복사.
 
 ### 2. API 주소 확인
 
-이번 프로젝트에서 쓰는 API 주소:
+프로젝트에서 사용하는 API 주소:
 
 ```
 http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty
 ```
 
-공공데이터포털에서 제공하는 "시도별 실시간 측정정보 조회" 엔드포인트입니다.
+공공데이터포털 "시도별 실시간 측정정보 조회" 엔드포인트.
 
 <sub>
 출처: 대기오염정보 기술문서 v1.3<br>
@@ -69,7 +69,7 @@ Table 4 · API 서비스 개요
 
 ### 3. 파라미터 확인
 
-주요 파라미터만 알면 됩니다. `sidoName=전국` 으로 주면 서울부터 제주까지 17개 시도 데이터를 **한 번에** 받을 수 있어서 호출 수를 아낄 수 있습니다. `ver=1.3` 은 PM10·PM2.5 1시간 등급 자료까지 받는 버전입니다.
+주요 파라미터 요약. `sidoName=전국` 지정 시 17개 시도 데이터를 **한 번의 호출로** 수신 → 호출 수 절약. `ver=1.3` 은 PM10·PM2.5 1시간 등급 자료 포함 버전.
 
 <sub>
 출처: 대기오염정보 기술문서 v1.3<br>
@@ -105,11 +105,11 @@ Table 16 · 요청 메시지 명세
 
 ### 4. 구글 클라우드 설정
 
-구글 클라우드 콘솔에서 **서비스 계정(Service Account)** 을 하나 만들고 BigQuery 관리자 권한을 줍니다. 그런 다음 JSON 키 파일을 다운로드하세요. 이 파일이 "프로그램이 BigQuery 에 접속할 때 쓰는 비밀번호" 라고 보면 됩니다.
+구글 클라우드 콘솔에서 **서비스 계정(Service Account)** 생성 → **BigQuery 관리자** 권한 부여 → **JSON 키 파일** 다운로드. 이 키가 "프로그램이 BigQuery 에 접속할 때 쓰는 비밀번호" 역할.
 
 ### 5. 라이브러리 추가
 
-`requirements.txt` 에 쓸 라이브러리를 적어둡니다.
+`requirements.txt` 에 필요 라이브러리 추가.
 
 ```
 apache-airflow-providers-google
@@ -121,38 +121,38 @@ lxml
 
 ### 6. Airflow 실행
 
-프로젝트 폴더에서 아래 한 줄이면 Airflow 가 실행됩니다.
+프로젝트 폴더에서 한 줄 명령으로 Airflow 기동.
 
 ```bash
 docker compose up -d
 ```
 
-잠시 후 브라우저에서 `http://localhost:8081` 로 접속. 아이디·비번은 둘 다 `airflow`.
+브라우저에서 `http://localhost:8081` 접속. 아이디·비번 모두 `airflow`.
 
 ### 7. Airflow 에 비밀정보 등록
 
-Airflow 웹화면에서 **Admin → Variables** 로 가서 두 가지를 넣어줍니다.
+Airflow 웹 UI → **Admin → Variables** 에서 2개 등록.
 
 - **SERVICE_API_KEY**: 1단계에서 복사한 공공데이터 인증키
-- **GCP_SERVICE_ACCOUNT**: 4단계에서 받은 서비스 계정 JSON 파일 전체 내용을 한 줄 문자열로
+- **GCP_SERVICE_ACCOUNT**: 4단계 JSON 파일 **전체 내용**을 한 줄 문자열로
 
-한 줄로 바꾸는 명령어는 아래와 같습니다 (Git Bash 또는 PowerShell).
+JSON → 한 줄 변환 명령 (Git Bash · PowerShell).
 
 ```bash
 cat service_account_key.json | python -c "import sys,json; print(json.dumps(json.load(sys.stdin)))"
 ```
 
-출력된 결과를 복사해서 Variable 값 란에 붙여넣으면 됩니다.
+출력 결과를 Variable 값에 그대로 붙여넣기.
 
 ### 8. DAG 실행
 
-Airflow 웹 UI 에서 `sprint18_air_quality_bq` 라는 DAG 를 켜면(토글 ON) 매시간 정각에 자동 실행됩니다. 지금 바로 돌려보고 싶으면 **Trigger DAG** 버튼을 누르세요.
+Airflow UI 에서 `sprint18_air_quality_bq` DAG 토글 ON → 매시간 정각 자동 실행. 수동 즉시 실행은 **Trigger DAG** 버튼.
 
 ---
 
 ## DAG 코드
 
-`dags/air_quality_dag_bq.py` 의 전체 내용입니다. Task 는 두 개입니다 — **수집** 과 **적재**.
+`dags/air_quality_dag_bq.py` 전체. Task 2개 — **수집** · **적재**.
 
 ```python
 import json
@@ -273,11 +273,11 @@ with DAG(
 
 ## 분석 노트북
 
-`sprint18/` 폴더 안에 Jupyter 노트북 두 개가 있습니다.
+`sprint18/` 폴더에 Jupyter 노트북 2개.
 
-**sprint18_colab_hardcoding.ipynb** — API 호출부터 BigQuery 적재까지 **셀 하나씩 직접 따라가며 실습**하는 노트북입니다. Airflow 없이도 돌려볼 수 있어서 학습용으로 좋습니다.
+**sprint18_colab_hardcoding.ipynb** — API 호출부터 BigQuery 적재까지 **셀 단위 실습**용. Airflow 없이도 실행 가능, 학습용 적합.
 
-**sprint18_analysis.ipynb** — BigQuery 에 쌓인 데이터를 SQL 로 조회해서 **차트 3장** 을 만드는 노트북입니다. 아래 결과물이 여기서 나옵니다.
+**sprint18_analysis.ipynb** — BigQuery 데이터를 SQL 로 조회해 **차트 3장** 생성. 아래 결과물이 이 노트북 출력.
 
 ---
 
