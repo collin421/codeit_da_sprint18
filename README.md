@@ -2,89 +2,76 @@
 
 # 에어코리아 대기오염 데이터 파이프라인
 
-**공공데이터포털 API → Airflow → BigQuery 로 이어지는 시간별 자동 수집·분석 파이프라인**
+**매시간 전국 대기질 데이터를 자동으로 받아와 저장하고, 차트로 분석하는 프로젝트**
 
 </div>
 
 ---
 
-## 요약
+## 프로젝트가 뭐 하는 건가요?
 
-한국환경공단 에어코리아 OpenAPI 에서 **전국 약 700개 측정소**의 실시간 대기질 데이터를 매시간 자동 수집 → BigQuery 에 누적 적재 → Jupyter 노트북에서 SQL 로 집계·시각화.
+한국환경공단이 제공하는 **대기오염 공개 API** 에서 전국 약 700개 측정소의 데이터를 **한 시간에 한 번씩 자동으로 수집**합니다.
 
-**분석 산출물 (Jupyter 노트북)**
-- 시도별 PM2.5 평균 (막대그래프)
-- 시간대별 PM10/PM2.5 추이 (선그래프)
-- 오염물질 간 상관관계 (히트맵)
+수집한 데이터는 구글 클라우드의 **BigQuery**(대용량 데이터베이스)에 쌓아두고, **Jupyter 노트북**에서 간단한 SQL 로 조회해서 **차트 3장**을 만듭니다.
 
----
-
-## 기술 스택
-
-| 단계 | 도구 |
-|---|---|
-| 오케스트레이션 | Apache Airflow (Docker Compose · LocalExecutor) |
-| 데이터 수집 | `requests` + `pd.read_xml()` |
-| 중간 저장 | 로컬 CSV (`utf-8-sig`) |
-| 데이터 웨어하우스 | Google BigQuery |
-| 분석·시각화 | pandas + matplotlib + koreanize-matplotlib |
+사람이 직접 할 일은 처음 한 번 셋업 해두는 것뿐. 이후에는 알아서 돌아갑니다.
 
 ---
 
-## 프로젝트 구조
+## 전체 흐름
 
-```
-코드잇12_스프린트18/
-├── dags/
-│   └── air_quality_dag_bq.py            # Airflow DAG (Task 2개: 수집 + 적재)
-├── sprint18/
-│   ├── sprint18_colab_hardcoding.ipynb  # Colab/Jupyter 수집 실습 노트북
-│   ├── sprint18_analysis.ipynb          # BigQuery 분석 노트북 (차트 3종)
-│   ├── bigquery_analysis.sql            # BQ 분석 쿼리
-│   ├── service_account_key.json         # GCP 인증키 (커밋 금지)
-│   └── sprint18_data.csv                # 샘플 데이터
-├── config/                               # Airflow 설정
-├── plugins/                              # Airflow 플러그인
-├── Dockerfile
-├── docker-compose.yaml
-├── requirements.txt
-└── .env                                  # 환경변수 (커밋 금지)
-```
+![architecture](architecture.png)
+
+1. Airflow 가 **매시간 정각**에 에어코리아 API 를 호출
+2. 받은 데이터를 시간별 CSV 파일로 저장
+3. 그 CSV 를 BigQuery 테이블에 덧붙이기 (기존 데이터 유지)
+4. 필요할 때 Jupyter 노트북에서 BigQuery 조회 → SQL 로 집계
+5. 집계 결과로 차트 3장 생성 (PNG 파일)
+
+---
+
+## 폴더 구조
+
+![folder tree](folder_tree.png)
+
+---
+
+## 사용한 도구
+
+- **Apache Airflow** — "매시간 이거 실행해라" 같은 자동 스케줄링 담당. Docker 로 띄움
+- **Google BigQuery** — 수십만 행도 SQL 로 몇 초 안에 집계되는 클라우드 데이터베이스
+- **Python** — 데이터 처리(`pandas`), 시각화(`matplotlib`), API 호출(`requests`) 전부
+- **Docker Compose** — Airflow 를 한 줄 명령어로 실행·종료하기 위한 도구
 
 ---
 
 ## 실행 순서
 
-### 1. 공공데이터포털 API 신청 및 키 발급
+### 1. API 키 발급
 
-- [공공데이터포털](https://www.data.go.kr/) 회원가입·로그인
-- **한국환경공단 에어코리아 대기오염정보** 검색 → 활용신청
-- 마이페이지 → 데이터활용 → Open API → 활용신청 현황 → **일반 인증키(Decoding) 복사**
+[공공데이터포털](https://www.data.go.kr/) 에서 회원가입 후 **한국환경공단 에어코리아 대기오염정보** 를 검색해 활용신청합니다. 승인되면 마이페이지에서 **Decoding 인증키** 를 복사합니다.
 
-### 2. API 엔드포인트 확인 — 시도별 실시간 측정정보 조회
+### 2. API 주소 확인
 
-- **요청 주소**: `http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty`
-- 파이썬 샘플 코드로 호출 구조 확인 (구성 파악용)
+이번 프로젝트에서 쓰는 API 주소:
 
-### 3. API 파라미터 확인 (기술문서)
+```
+http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty
+```
 
-| 항목 | 값 | 설명 |
-|---|---|---|
-| `serviceKey` | 발급받은 인증키 | 필수 |
-| `sidoName` | **전국** | 17개 시도를 **한 번의 호출**로 수신 |
-| `ver` | `1.3` | PM10·PM2.5 1시간 등급 자료 포함 |
-| `returnType` | `xml` | 응답 형식 |
-| `numOfRows` | `1000` | 측정소 약 700개 여유있게 커버 |
+공공데이터포털에서 제공하는 "시도별 실시간 측정정보 조회" 엔드포인트입니다.
 
-### 4. GCP 설정
+### 3. 파라미터 확인
 
-- GCP 프로젝트에서 **서비스 계정** 생성
-- **BigQuery 관리자** 권한 부여
-- **JSON 키** 생성 → 다운로드
+주요 파라미터만 알면 됩니다. `sidoName=전국` 으로 주면 서울부터 제주까지 17개 시도 데이터를 **한 번에** 받을 수 있어서 호출 수를 아낄 수 있습니다. `ver=1.3` 은 PM10·PM2.5 1시간 등급 자료까지 받는 버전입니다.
 
-### 5. 의존성 추가 (Dockerfile / requirements.txt)
+### 4. 구글 클라우드 설정
 
-`requirements.txt` 에 필요한 라이브러리 추가:
+구글 클라우드 콘솔에서 **서비스 계정(Service Account)** 을 하나 만들고 BigQuery 관리자 권한을 줍니다. 그런 다음 JSON 키 파일을 다운로드하세요. 이 파일이 "프로그램이 BigQuery 에 접속할 때 쓰는 비밀번호" 라고 보면 됩니다.
+
+### 5. 라이브러리 추가
+
+`requirements.txt` 에 쓸 라이브러리를 적어둡니다.
 
 ```
 apache-airflow-providers-google
@@ -94,41 +81,40 @@ requests
 lxml
 ```
 
-### 6. Airflow 실행 (Docker Compose)
+### 6. Airflow 실행
+
+프로젝트 폴더에서 아래 한 줄이면 Airflow 가 실행됩니다.
 
 ```bash
 docker compose up -d
 ```
 
-컨테이너 기동 후 `localhost:8081` 로 접속 (아이디/비번: `airflow` / `airflow`).
+잠시 후 브라우저에서 `http://localhost:8081` 로 접속. 아이디·비번은 둘 다 `airflow`.
 
-### 7. Airflow Variables 등록
+### 7. Airflow 에 비밀정보 등록
 
-Airflow Web UI → **Admin → Variables** 에서 2개 등록:
+Airflow 웹화면에서 **Admin → Variables** 로 가서 두 가지를 넣어줍니다.
 
-| Key | Value |
-|---|---|
-| `SERVICE_API_KEY` | 1단계에서 복사한 공공데이터포털 Decoding 인증키 |
-| `GCP_SERVICE_ACCOUNT` | 4단계에서 다운로드한 서비스 계정 JSON 파일 **전체 내용**을 한 줄 문자열로 |
+- **SERVICE_API_KEY**: 1단계에서 복사한 공공데이터 인증키
+- **GCP_SERVICE_ACCOUNT**: 4단계에서 받은 서비스 계정 JSON 파일 전체 내용을 한 줄 문자열로
 
-**JSON → 한 줄 문자열 변환** (PowerShell 또는 Git Bash)
+한 줄로 바꾸는 명령어는 아래와 같습니다 (Git Bash 또는 PowerShell).
 
 ```bash
 cat service_account_key.json | python -c "import sys,json; print(json.dumps(json.load(sys.stdin)))"
 ```
 
-출력된 한 줄 결과를 Variable 값에 그대로 붙여넣기.
+출력된 결과를 복사해서 Variable 값 란에 붙여넣으면 됩니다.
 
 ### 8. DAG 실행
 
-Airflow UI 에서 `sprint18_air_quality_bq` DAG 활성화.
-매시간 정각 자동 실행. 수동 실행은 **Trigger DAG** 버튼.
+Airflow 웹 UI 에서 `sprint18_air_quality_bq` 라는 DAG 를 켜면(토글 ON) 매시간 정각에 자동 실행됩니다. 지금 바로 돌려보고 싶으면 **Trigger DAG** 버튼을 누르세요.
 
 ---
 
 ## DAG 코드
 
-`dags/air_quality_dag_bq.py`
+`dags/air_quality_dag_bq.py` 의 전체 내용입니다. Task 는 두 개입니다 — **수집** 과 **적재**.
 
 ```python
 import json
@@ -247,69 +233,45 @@ with DAG(
 
 ---
 
-## 분석 노트북 (`sprint18/`)
+## 분석 노트북
 
-### `sprint18_colab_hardcoding.ipynb` — 수집 실습
-DAG 없이도 API 호출 → XML 파싱 → CSV 저장 → BigQuery 적재까지 **셀 단위로 실습** 가능.
+`sprint18/` 폴더 안에 Jupyter 노트북 두 개가 있습니다.
 
-### `sprint18_analysis.ipynb` — 분석
-BigQuery 에서 SQL 로 집계해 차트 3장 생성.
+**sprint18_colab_hardcoding.ipynb** — API 호출부터 BigQuery 적재까지 **셀 하나씩 직접 따라가며 실습**하는 노트북입니다. Airflow 없이도 돌려볼 수 있어서 학습용으로 좋습니다.
 
-| 분석 | 핵심 SQL | 산출물 |
-|---|---|---|
-| 시도별 PM2.5 평균 (24h) | `GROUP BY sidoName` + `AVG` | `pm25_bar_chart.png` |
-| 시간대별 PM10/PM2.5 추이 (7일) | `TIMESTAMP_TRUNC(..., HOUR)` + `AVG` | `trend_chart.png` |
-| 오염물질 상관관계 (7일) | `SAFE_CAST` + pandas `.corr()` | `correlation_heatmap.png` |
+**sprint18_analysis.ipynb** — BigQuery 에 쌓인 데이터를 SQL 로 조회해서 **차트 3장** 을 만드는 노트북입니다. 아래 결과물이 여기서 나옵니다.
 
 ---
 
-## 분석 결과 & 인사이트
+## 분석 결과
 
-> 데이터 기간: **2026-04-17 ~ 2026-04-21** (약 4일, 52,416행, 672개 측정소)
+데이터 기간: **2026-04-17 ~ 2026-04-21** (약 4일, 52,416행, 672개 측정소)
 
-### 1. 시도별 PM2.5 평균 (최근 24시간)
+### 시도별 PM2.5 평균 (최근 24시간)
 
 ![PM2.5 Bar Chart](sprint18/pm25_bar_chart.png)
 
-**핵심 인사이트**
-- 17개 시도 모두 "보통" 등급 구간(15~35 μg/m³) 내 → 이 시점 경보 수준 지역 없음
-- **최고**: 광주 25.5 · 전북 25.3 (서남권 평균 ↑)
-- **최저**: 경남 14.3 · 부산 15.7 (동남권 해안지역 양호)
-- 수도권(서울 21.2 / 경기 21.1 / 인천 21.7)은 전국 평균 수준
+17개 시도 모두 "보통" 등급(15~35 μg/m³) 안에 있어 **당장 경보가 울릴 지역은 없었습니다**. 다만 **광주(25.5)·전북(25.3)** 이 가장 나쁘고 **경남(14.3)·부산(15.7)** 이 가장 좋습니다. 서남권이 동남권보다 미세먼지가 많다는 뜻입니다. 서울·경기·인천 수도권은 평균 수준입니다.
 
-### 2. PM10 / PM2.5 시간대별 추이 (최근 7일)
+### PM10 / PM2.5 시간대별 추이 (최근 7일)
 
 ![Trend Chart](sprint18/trend_chart.png)
 
-**핵심 인사이트**
-- **04-20 오후부터 PM10 이 40 → 138 μg/m³ 로 3배 이상 급상승** (7일 기간 중 최고점)
-- 급격한 상승 패턴 = **황사 / 외부 유입**의 전형적 특징
-- 반면 **PM2.5 는 10~22 범위에서 안정** → 굵은 입자(PM10) 위주로 증가
-- 즉, 이 시점 대기질 악화는 **국내 배출원보다 외부 유입 요인**
+대부분 기간은 평탄하게 흘러가는데, **04-20 오후부터 PM10 수치가 40 에서 138 μg/m³ 로 3배 넘게 치솟았습니다**. 짧은 시간에 이렇게 급하게 오르는 건 **황사처럼 외부에서 먼지가 대량 유입**될 때 전형적입니다. 같은 시기 PM2.5(더 작은 입자)는 크게 변하지 않았는데, 이는 이번 상승이 **좀 굵은 입자 위주**라는 걸 보여줍니다.
 
-### 3. 오염물질 간 상관관계 (최근 7일)
+### 오염물질 간 상관관계 (최근 7일)
 
 ![Correlation Heatmap](sprint18/correlation_heatmap.png)
 
-**핵심 인사이트**
-- **PM10 ↔ PM2.5 = 0.48** : 미세먼지끼리 **출처가 유사**해서 동반 상승
-- **CO ↔ NO2 = 0.39** : 자동차 배기·화력발전 같은 **연소 기반 오염원 공통성**
-- **O3 ↔ NO2 = −0.36** (음상관) : 햇빛 → NO2가 O3로 변환되는 **광화학 반응**. 한쪽이 오르면 반대쪽이 감소
-- SO2, CO 와 미세먼지 상관은 약함(0.01~0.16) → **미세먼지 발생 경로가 가스성 오염과 독립적**
+상관계수는 −1 에서 +1 사이 값으로, 양수면 "같이 오르내림", 음수면 "반대로 움직임" 을 뜻합니다.
 
-### 종합 요약
-
-| 질문 | 결론 |
-|---|---|
-| 어느 지역이 나쁜가? | **광주·전북** (서남권) |
-| 어느 지역이 좋은가? | **경남·부산** (동남권) |
-| 최근 7일 가장 큰 이슈? | **04-20 오후 PM10 급등** (황사 추정) |
-| 미세먼지는 단독 현상인가? | 아님 — **미세먼지끼리 동반** 하지만 가스(SO2/CO)와는 별개 |
-| O3(오존)은 언제 높아지나? | **NO2가 낮을 때** (광화학 반응으로 반비례) |
+- **PM10 과 PM2.5 가 0.48** 로 가장 높게 나왔습니다. 미세먼지끼리는 **출처가 비슷해서** 같이 오르내립니다.
+- **일산화탄소(CO)와 이산화질소(NO2)도 0.39** 로 중간 수준. 둘 다 자동차 배기·화력발전 같은 "뭔가를 태워서" 생기는 가스라 같이 움직입니다.
+- **오존(O3)과 NO2 는 −0.36** 으로 반대로 움직입니다. 햇빛을 받으면 NO2 가 O3 로 변하는 **광화학 반응** 때문에, 한쪽이 올라가면 다른 쪽은 내려갑니다.
 
 ---
 
-> ## **유의 사항 — 보안**
+> ## 유의 사항 — 보안
 >
 > ---
 >
@@ -338,9 +300,8 @@ BigQuery 에서 SQL 로 집계해 차트 3장 생성.
 >
 > **커밋 전 체크**
 >
-> - `git status` 실행 시 `service_account_key.json`, `project-*.json`, `.env` 가 **Untracked** 목록에도 안 보여야 정상
+> - `git status` 실행 시 `service_account_key.json`, `project-*.json`, `.env` 가 Untracked 목록에도 안 보여야 정상
 > - 혹시 이미 커밋됐다면 `git rm --cached <파일>` 로 인덱스에서 제거 후 다시 커밋, 그리고 **해당 키는 즉시 폐기·재발급**
-> - DAG 코드에 실제 GCP 프로젝트 ID 가 하드코딩되지 않았는지 확인 (플레이스홀더 `your-gcp-project-id` 유지 또는 `.env` 로 분리)
 
 ---
 
