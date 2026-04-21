@@ -19,11 +19,11 @@ BQ_TABLE       = os.environ.get("BQ_TABLE_NAME",  "sprint18_air_quality")
 # 에어코리아 API 주소
 API_URL = "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty"
 
-# CSV 저장 폴더
+# CSV 저장 폴더 (파일명은 실행 시각으로 동적 생성)
 DATA_DIR = "/opt/airflow/dags/data"
 
 
-# Task 1: API 호출 → 일별 CSV 에 append
+# Task 1: API 호출 → CSV 저장
 
 def fetch_air_quality_data():
 
@@ -42,34 +42,24 @@ def fetch_air_quality_data():
     response = requests.get(API_URL, params=params, timeout=30)
     print(f"전국 호출 완료: status={response.status_code}")
 
-    # pd.read_xml 으로 바로 DataFrame 변환
+    # pd.read_xml 으로 item 바로 DataFrame 변환
     df = pd.read_xml(response.content, xpath="//item")
     print(f"전국 측정소 수: {len(df)}건")
 
-    # 수집 시각 컬럼 추가 — 9시간 추가하여 한국 시간대로 맞춤
+    # 수집 시각 컬럼 추가 (KST = UTC+9)
     kst = timezone(timedelta(hours=9))
     now_kst = datetime.now(kst)
     df["collected_at"] = now_kst.strftime("%Y-%m-%d %H:%M:%S")
 
+    # 시간별 CSV 파일 경로 생성 (예: data/air_quality_2026-03-18_15.csv)
     os.makedirs(DATA_DIR, exist_ok=True)
+    csv_path = f"{DATA_DIR}/data_{now_kst.strftime('%Y-%m-%d_%H')}.csv"
 
-    # 일별 CSV — 하루 동안 같은 파일에 시간별로 행만 추가됨
-    # 예: data_2026-04-21.csv 에 10시/11시/12시... 데이터가 차곡차곡 누적
-    daily_csv = f"{DATA_DIR}/data_{now_kst.strftime('%Y-%m-%d')}.csv"
-
-    # 파일이 없으면 헤더 포함해서 처음부터 생성, 있으면 append 모드로 행만 추가
-    if os.path.exists(daily_csv):
-        df.to_csv(daily_csv, mode="a", header=False, index=False, encoding="utf-8-sig")
-    else:
-        df.to_csv(daily_csv, mode="w", header=True,  index=False, encoding="utf-8-sig")
-
-    # BigQuery 업로드용 "최신 시간 스냅샷" — 매시간 덮어쓰기
-    # (일별 CSV 를 그대로 올리면 중복 적재되므로, 이번 시간 데이터만 담긴 별도 파일 사용)
-    latest_csv = f"{DATA_DIR}/_latest.csv"
-    df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
+    # CSV 저장
+    df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
 
-# Task 2: 최신 시간 CSV → BigQuery 적재
+# Task 2: CSV → BigQuery 적재
 
 def load_csv_to_bigquery():
 
@@ -77,11 +67,11 @@ def load_csv_to_bigquery():
     json_string  = Variable.get("GCP_SERVICE_ACCOUNT")
     service_info = json.loads(json_string)
 
-    # 서비스 계정으로 인증 후 BigQuery 클라이언트 객체 생성
+    # 서비스 계정으로 인증 후 빅쿼리 클라이언트 객체 생성
     credentials = service_account.Credentials.from_service_account_info(service_info)
     bq_client   = bigquery.Client(credentials=credentials, project=GCP_PROJECT_ID)
 
-    # 적재할 테이블 경로: 프로젝트.데이터셋.테이블
+    # 적재할 테이블 경로, 프로젝트.데이터셋.테이블
     table_id = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}"
 
     # 적재 설정
@@ -92,10 +82,11 @@ def load_csv_to_bigquery():
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,  # 기존 데이터 유지하고 추가
     )
 
-    # 이번 시간 데이터만 담긴 스냅샷 파일 (Task 1 에서 매번 덮어씀)
-    csv_path = f"{DATA_DIR}/_latest.csv"
+    # Task 1 에서 저장한 CSV 경로 (같은 시각 기준)
+    k_time = timezone(timedelta(hours=9))
+    csv_path = f"{DATA_DIR}/data_{datetime.now(k_time).strftime('%Y-%m-%d_%H')}.csv"
 
-    # 파일 열어서 BigQuery 에 업로드
+    # 파일 열어서 빅쿼리에 업로드
     with open(csv_path, "rb") as csv_file:
         load_job = bq_client.load_table_from_file(csv_file, table_id, job_config=job_config)
         load_job.result()  # 업로드 완료까지 대기
@@ -105,10 +96,9 @@ def load_csv_to_bigquery():
 
 with DAG(
     dag_id="sprint18_air_quality_bq",
-    description="API 호출 → 일별 CSV append → BigQuery 적재 (매시 20분)",
+    description="API호출하여 로컬에 적재하고 빅쿼리 전송",
     start_date=datetime(2025, 1, 1),
-    # 매시 20분 실행 — 기술문서상 "매시 15분 내외" 데이터 생성 후 여유 5분
-    schedule_interval="20 * * * *",
+    schedule_interval="0 * * * *", # 매시간 0분에 실행
     catchup=False,
 ) as dag:
 
